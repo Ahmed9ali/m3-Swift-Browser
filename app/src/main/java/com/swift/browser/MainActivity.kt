@@ -127,8 +127,6 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.ButtonGroup
-import androidx.compose.material3.ShortNavigationBar
-import androidx.compose.material3.ShortNavigationBarItem
 
 private val Bg = Color(0xFF101114)
 private val Surface = Color(0xFF1A1C20)
@@ -140,7 +138,6 @@ private val TextMain = Color(0xFFF4F4F5)
 private val TextMuted = Color(0xFF9A9DA5)
 private val Green = Color(0xFF65C98A)
 
-// Everything needed to bring the browser back exactly as it was left.
 private class SavedSession(
     val tabs: List<BrowserTab>,
     val activeId: Long,
@@ -186,7 +183,6 @@ private fun loadSession(context: Context): SavedSession? {
     }
 }
 
-// Bookmarks kept in this app's own storage (first run imports any old ones).
 private class BookmarkStore(context: Context, legacy: () -> List<Pair<String, String>>) {
     private val prefs = context.getSharedPreferences("swift_bookmarks", Context.MODE_PRIVATE)
 
@@ -228,7 +224,6 @@ private class BookmarkStore(context: Context, legacy: () -> List<Pair<String, St
     }
 }
 
-// Last snapshot of the homepage: every home tab shows it in the tab overview.
 private var HomeThumbStore by mutableStateOf<Bitmap?>(null)
 
 private fun desktopUserAgent(context: Context): String {
@@ -1875,6 +1870,7 @@ private fun SwiftBrowserApp() {
                         AlertDialog(
                             onDismissRequest = { pendingDownload = null },
                             containerColor = Surface,
+                            shape = RoundedCornerShape(28.dp),
                             title = { Text("Download file?", color = TextMain) },
                             text = {
                                 Column {
@@ -2255,7 +2251,7 @@ private fun SwiftBrowserApp() {
                     }
                 }
 
-                // --- EXPRESSIVE SHORT NAVIGATION BAR ---
+                // --- EXPRESSIVE CUSTOM BOTTOM NAVIGATION BAR ---
                 if (address == "swift://settings" || address == "swift://downloads") {
                     // Settings and Downloads are full screen pages: no toolbar.
                 } else if (showTabs) {
@@ -2283,75 +2279,84 @@ private fun SwiftBrowserApp() {
                         }
                     }
                 } else {
-                    ShortNavigationBar(
-                        containerColor = Surface,
-                        contentColor = TextMain,
+                    Surface(
+                        color = Surface,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        ShortNavigationBarItem(
-                            selected = isHome,
-                            onClick = { load("swift://home") },
-                            icon = { Icon(Icons.Rounded.Home, contentDescription = "Home") },
-                            label = { Text("Home") }
-                        )
-                        
-                        val canBookmarkPage = !isHome && pageUrl.startsWith("http")
-                        ShortNavigationBarItem(
-                            selected = canBookmarkPage && isBookmarked,
-                            onClick = {
-                                if (canBookmarkPage) {
-                                    toggleBookmark()
-                                } else {
-                                    address = "swift://bookmarks"
-                                    showTabs = false
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Home
+                            BottomBarItem(
+                                icon = Icons.Rounded.Home,
+                                label = "Home",
+                                isSelected = isHome,
+                                onClick = { load("swift://home") }
+                            )
+                            
+                            // Bookmark
+                            val canBookmarkPage = !isHome && pageUrl.startsWith("http")
+                            BottomBarItem(
+                                icon = if (canBookmarkPage && isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                                label = "Bookmarks",
+                                isSelected = canBookmarkPage && isBookmarked,
+                                onClick = {
+                                    if (canBookmarkPage) {
+                                        toggleBookmark()
+                                    } else {
+                                        address = "swift://bookmarks"
+                                        showTabs = false
+                                        showSuggestions = false
+                                    }
+                                }
+                            )
+                            
+                            // Search
+                            BottomBarItem(
+                                icon = Icons.Rounded.Search,
+                                label = "Search",
+                                isSelected = false,
+                                onClick = {
+                                    address = ""
                                     showSuggestions = false
+                                    addressFocusRequester.requestFocus()
+                                    keyboardController?.show()
                                 }
-                            },
-                            icon = { Icon(if (canBookmarkPage && isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, contentDescription = "Bookmark") },
-                            label = { Text("Bookmark") }
-                        )
-                        
-                        ShortNavigationBarItem(
-                            selected = false,
-                            onClick = {
-                                address = ""
-                                showSuggestions = false
-                                addressFocusRequester.requestFocus()
-                                keyboardController?.show()
-                            },
-                            icon = { Icon(Icons.Rounded.Search, contentDescription = "Search") },
-                            label = { Text("Search") }
-                        )
-                        
-                        val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
-                        ShortNavigationBarItem(
-                            selected = showTabs,
-                            onClick = {
-                                if (!showTabs) {
-                                    captureThumb(activeId)
-                                    tabSection = if (activeIsPrivate) 2 else 0
+                            )
+                            
+                            // Tabs
+                            val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
+                            BottomBarItem(
+                                icon = Icons.Rounded.Tab,
+                                label = "Tabs",
+                                isSelected = showTabs,
+                                badgeCount = tabs.count { it.isPrivate == activeIsPrivate },
+                                onClick = {
+                                    if (!showTabs) {
+                                        captureThumb(activeId)
+                                        tabSection = if (activeIsPrivate) 2 else 0
+                                    }
+                                    showTabs = !showTabs
+                                    showShield = false
+                                    showSuggestions = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
                                 }
-                                showTabs = !showTabs
-                                showShield = false
-                                showSuggestions = false
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                            },
-                            icon = {
-                                // Expressive Badge for Tab Count
-                                BadgedBox(badge = { Badge { Text(tabs.count { it.isPrivate == activeIsPrivate }.toString()) } }) {
-                                    Icon(Icons.Rounded.Tab, contentDescription = "Tabs")
-                                }
-                            },
-                            label = { Text("Tabs") }
-                        )
-                        
-                        ShortNavigationBarItem(
-                            selected = showMenu,
-                            onClick = { showMenu = true },
-                            icon = { Icon(Icons.Rounded.MoreVert, contentDescription = "Menu") },
-                            label = { Text("Menu") }
-                        )
+                            )
+                            
+                            // Menu
+                            BottomBarItem(
+                                icon = Icons.Rounded.MoreVert,
+                                label = "Menu",
+                                isSelected = showMenu,
+                                onClick = { showMenu = true }
+                            )
+                        }
                     }
                 }
             }
@@ -2701,6 +2706,34 @@ private fun SwiftBrowserApp() {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BottomBarItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    badgeCount: Int = 0,
+    onClick: () -> Unit
+) {
+    val color = if (isSelected) Accent else TextMuted
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (badgeCount > 0) {
+            BadgedBox(badge = { Badge { Text(badgeCount.toString()) } }) {
+                Icon(icon, contentDescription = label, tint = color)
+            }
+        } else {
+            Icon(icon, contentDescription = label, tint = color)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 10.sp, color = color, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
