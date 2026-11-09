@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.swift.browser"
-    compileSdk = 35
+    compileSdk = 36 // Bumped from 35 to support Material 3 Expressive
 
     defaultConfig {
         applicationId = "com.swift.browser"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36 // Bumped to match
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -44,7 +44,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     
     // --- MATERIAL 3 EXPRESSIVE OVERRIDE ---
-    // Explicitly forcing the alpha version to unlock ToggleButton, ButtonGroup, etc.
     implementation("androidx.compose.material3:material3:1.5.0-alpha23")
     
     implementation("androidx.compose.material:material-icons-core")
