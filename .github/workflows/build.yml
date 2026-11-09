@@ -4,14 +4,14 @@ on:
   push:
     branches: [ main, master ]
     tags:
-      - 'v*' # Triggers when you push a tag like v1.0.0
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create a GitHub Release
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -23,12 +23,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK Platform 37 (Canary)
-        run: |
-          echo "y" | sdkmanager "platforms;android-37"
+      # No custom SDK step needed - the runner has API 36 installed by default.
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -51,7 +46,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          # If pushed via tag, use the tag name. Otherwise, auto-generate a version
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.0.{0}', github.run_number) }}
           name: Release ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.0.{0}', github.run_number) }}
           draft: false
