@@ -1,17 +1,12 @@
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-}
-
 android {
     namespace = "com.swift.browser"
-    compileSdk = 36 // Bumped from 35 to support Material 3 Expressive
+    compileSdk = 37 // <--- Required for Material3 1.5.0-alpha
+    compileSdkPreview = "CANARY" // <--- Tells AGP to use the preview SDK
 
     defaultConfig {
         applicationId = "com.swift.browser"
         minSdk = 26
-        targetSdk = 36 // Bumped to match
+        targetSdk = 36 // Target SDK can stay at 36 for now
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -33,10 +28,12 @@ android {
 }
 
 dependencies {
+    // BOM
     val composeBom = platform("androidx.compose:compose-bom:2025.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
+    // Core dependencies
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
