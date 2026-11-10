@@ -1498,18 +1498,141 @@ private fun SwiftBrowserApp() {
 
     MaterialExpressiveTheme(
         colorScheme = darkColorScheme(
-            primary = Accent, background = Bg, surface = Surface,
-            onBackground = TextMain, onSurface = TextMain
+            primary = Accent,
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFF6B2A12),
+            onPrimaryContainer = Color(0xFFFFDBCF),
+            secondary = Accent,
+            onSecondary = Color.White,
+            secondaryContainer = Color(0xFF5A3122),
+            onSecondaryContainer = Color(0xFFFFDBCF),
+            background = Bg,
+            onBackground = TextMain,
+            surface = Surface,
+            onSurface = TextMain,
+            surfaceVariant = Surface2,
+            onSurfaceVariant = TextMuted,
+            outline = Surface3
         ),
         motionScheme = MotionScheme.expressive()
     ) {
         Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                containerColor = Bg,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    // Bottom area of the app: tabs strip on the tab overview, and the
+                    // Material 3 expressive navigation bar on the home surface.
+                    val onHomeSurface = isHome && !showTabs &&
+                        address != "swift://settings" && address != "swift://downloads"
+
+                    if (address == "swift://settings" || address == "swift://downloads") {
+                        // Settings and Downloads are full screen pages: keep content clear of the system bar.
+                        Box(Modifier.navigationBarsPadding()) {}
+                    } else if (showTabs) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(Surface)
+                                .navigationBarsPadding()
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                Modifier
+                                    .align(Alignment.Center)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(Color(0xFFE8E8EC))
+                                    .clickable {
+                                        if (showTabs && tabSection == 1) newGroupWithTab() else newTab(private = showTabs && tabSection == 2)
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.Add, "New tab", tint = Color(0xFF16181C), modifier = Modifier.size(24.dp))
+                            }
+                            Box(Modifier.align(Alignment.CenterEnd)) {
+                                SettingsMenuBox(dots = true)
+                            }
+                        }
+                    } else if (onHomeSurface) {
+                        // --- MATERIAL 3 EXPRESSIVE BOTTOM NAVIGATION BAR ---
+                        val onBookmarksRoute = address == "swift://bookmarks" || address == "swift://history"
+                        val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
+
+                        NavigationBar(
+                            containerColor = Surface,
+                            tonalElevation = 0.dp
+                        ) {
+                            BottomBarItem(
+                                icon = Icons.Rounded.Home,
+                                label = "Home",
+                                selected = !onBookmarksRoute,
+                                onClick = { load("swift://home") }
+                            )
+
+                            BottomBarItem(
+                                icon = Icons.Rounded.BookmarkBorder,
+                                label = "Bookmarks",
+                                selected = onBookmarksRoute,
+                                onClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    address = "swift://bookmarks"
+                                    showTabs = false
+                                    showSuggestions = false
+                                }
+                            )
+
+                            BottomBarItem(
+                                icon = Icons.Rounded.Search,
+                                label = "Search",
+                                selected = addressFocused || showSuggestions,
+                                onClick = {
+                                    address = ""
+                                    showSuggestions = false
+                                    addressFocusRequester.requestFocus()
+                                    keyboardController?.show()
+                                }
+                            )
+
+                            BottomBarItem(
+                                icon = Icons.Rounded.Tab,
+                                label = "Tabs",
+                                selected = showTabs,
+                                badgeCount = tabs.count { it.isPrivate == activeIsPrivate },
+                                onClick = {
+                                    if (!showTabs) {
+                                        captureThumb(activeId)
+                                        tabSection = if (activeIsPrivate) 2 else 0
+                                    }
+                                    showTabs = !showTabs
+                                    showShield = false
+                                    showSuggestions = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                }
+                            )
+
+                            BottomBarItem(
+                                icon = Icons.Rounded.MoreVert,
+                                label = "Menu",
+                                selected = showMenu,
+                                onClick = { showMenu = true }
+                            )
+                        }
+                    } else {
+                        // Web page: no bottom bar, but keep the page clear of the system bar.
+                        Box(Modifier.navigationBarsPadding()) {}
+                    }
+                }
+            ) { innerPadding ->
             Column(
                 Modifier
                     .fillMaxSize()
                     .background(Bg)
                     .statusBarsPadding()
-                    .navigationBarsPadding()
+                    .padding(bottom = innerPadding.calculateBottomPadding())
             ) {
                 if (!showTabs && address != "swift://settings" && address != "swift://downloads") {
                     Row(
@@ -2258,101 +2381,7 @@ private fun SwiftBrowserApp() {
                     }
                 }
 
-                // --- EXPRESSIVE CUSTOM BOTTOM NAVIGATION BAR ---
-                if (address == "swift://settings" || address == "swift://downloads") {
-                    // Settings and Downloads are full screen pages: no toolbar.
-                } else if (showTabs) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(Surface)
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Row(
-                            Modifier
-                                .align(Alignment.Center)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(Color(0xFFE8E8EC))
-                                .clickable {
-                                    if (showTabs && tabSection == 1) newGroupWithTab() else newTab(private = showTabs && tabSection == 2)
-                                }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Rounded.Add, "New tab", tint = Color(0xFF16181C), modifier = Modifier.size(24.dp))
-                        }
-                        Box(Modifier.align(Alignment.CenterEnd)) {
-                            SettingsMenuBox(dots = true)
-                        }
-                    }
-                } else if (isHome && address == "swift://home" && !addressFocused && !showSuggestions) {
-                    // --- MATERIAL 3 EXPRESSIVE BOTTOM NAVIGATION BAR (Home screen only) ---
-                    val onBookmarksRoute = address == "swift://bookmarks" || address == "swift://history"
-                    val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
-
-                    NavigationBar(
-                        containerColor = Surface,
-                        tonalElevation = 0.dp,
-                        windowInsets = WindowInsets(0)
-                    ) {
-                        BottomBarItem(
-                            icon = Icons.Rounded.Home,
-                            label = "Home",
-                            selected = isHome && address == "swift://home",
-                            onClick = { load("swift://home") }
-                        )
-
-                        BottomBarItem(
-                            icon = Icons.Rounded.BookmarkBorder,
-                            label = "Bookmarks",
-                            selected = onBookmarksRoute,
-                            onClick = {
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                                address = "swift://bookmarks"
-                                showTabs = false
-                                showSuggestions = false
-                            }
-                        )
-
-                        BottomBarItem(
-                            icon = Icons.Rounded.Search,
-                            label = "Search",
-                            selected = addressFocused || showSuggestions,
-                            onClick = {
-                                address = ""
-                                showSuggestions = false
-                                addressFocusRequester.requestFocus()
-                                keyboardController?.show()
-                            }
-                        )
-
-                        BottomBarItem(
-                            icon = Icons.Rounded.Tab,
-                            label = "Tabs",
-                            selected = showTabs,
-                            badgeCount = tabs.count { it.isPrivate == activeIsPrivate },
-                            onClick = {
-                                if (!showTabs) {
-                                    captureThumb(activeId)
-                                    tabSection = if (activeIsPrivate) 2 else 0
-                                }
-                                showTabs = !showTabs
-                                showShield = false
-                                showSuggestions = false
-                                keyboardController?.hide()
-                                focusManager.clearFocus()
-                            }
-                        )
-
-                        BottomBarItem(
-                            icon = Icons.Rounded.MoreVert,
-                            label = "Menu",
-                            selected = showMenu,
-                            onClick = { showMenu = true }
-                        )
-                    }
-                }
+            }
             }
 
             val sheetGid = tabGroups[activeId]
