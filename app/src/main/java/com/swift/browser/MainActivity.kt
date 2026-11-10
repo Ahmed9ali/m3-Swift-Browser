@@ -2706,7 +2706,7 @@ private fun SwiftBrowserApp() {
 }
 
 @Composable
-private fun BottomBarItem(
+private fun RowScope.BottomBarItem(
     icon: ImageVector,
     label: String,
     selected: Boolean,
