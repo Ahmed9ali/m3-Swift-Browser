@@ -497,6 +497,7 @@ private fun SwiftBrowserApp() {
     val addressFocusRequester = remember {androidx.compose.ui.focus.FocusRequester()}
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val store = remember { BrowserStore(context) }
     val appSettings = remember { AppSettings(context) }
     val uiScope = rememberCoroutineScope()
@@ -521,6 +522,23 @@ private fun SwiftBrowserApp() {
     var showTabs by remember { mutableStateOf(false) }
     var showSuggestions by remember { mutableStateOf(false) }
     var addressFocused by remember { mutableStateOf(false) }
+    var showSearchScreen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var clipboardUrl by remember { mutableStateOf<String?>(null) }
+
+    // Refresh the clipboard when the app comes back to the foreground so a freshly
+    // copied link is detected right away.
+    val hostLifecycle = remember { context.findHostActivity()?.lifecycle }
+    DisposableEffect(hostLifecycle) {
+        if (hostLifecycle == null) return@DisposableEffect onDispose { }
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                clipboardUrl = readClipboardUrl(clipboardManager)
+            }
+        }
+        hostLifecycle.addObserver(observer)
+        onDispose { hostLifecycle.removeObserver(observer) }
+    }
     val tabGroups = remember { mutableStateMapOf<Long, Long>().apply { putAll(session?.groups ?: emptyMap()) } }
     val groupNames = remember { mutableStateMapOf<Long, String>().apply { putAll(session?.names ?: emptyMap()) } }
     val groupUpdated = remember { mutableStateMapOf<Long, Long>().apply { putAll(session?.updated ?: emptyMap()) } }
@@ -1348,6 +1366,7 @@ private fun SwiftBrowserApp() {
 
     BackHandler(enabled = true) {
         when {
+            showSearchScreen -> showSearchScreen = false
             showMenu -> showMenu = false
             findOpen -> {
                 findOpen = false
@@ -1587,12 +1606,19 @@ private fun SwiftBrowserApp() {
                             BottomBarItem(
                                 icon = Icons.Rounded.Search,
                                 label = "Search",
-                                selected = addressFocused || showSuggestions,
+                                selected = showSearchScreen,
                                 onClick = {
-                                    address = ""
-                                    showSuggestions = false
-                                    addressFocusRequester.requestFocus()
-                                    keyboardController?.show()
+                                    if (showSearchScreen) {
+                                        showSearchScreen = false
+                                    } else {
+                                        clipboardUrl = readClipboardUrl(clipboardManager)
+                                        searchQuery = ""
+                                        showSuggestions = false
+                                        showTabs = false
+                                        focusManager.clearFocus()
+                                        keyboardController?.hide()
+                                        showSearchScreen = true
+                                    }
                                 }
                             )
 
@@ -1667,6 +1693,7 @@ private fun SwiftBrowserApp() {
                                         addressFocused = it.isFocused
                                         if (it.isFocused && !wasFocused) {
                                             searchQueryOf(address)?.let { q -> address = q }
+                                            clipboardUrl = readClipboardUrl(clipboardManager)
                                         }
                                         if (!it.isFocused && wasFocused && pageUrl.startsWith("http")) {
                                             address = pageUrl
@@ -1678,7 +1705,10 @@ private fun SwiftBrowserApp() {
                                 keyboardActions = KeyboardActions(onGo = { load(address) }),
                                 decorationBox = { inner ->
                                     if (address.isEmpty()) {
-                                        Text("Search or type URL", color = TextMuted, fontSize = 14.sp)
+                                        Text(
+                                            if (clipboardUrl != null) "Paste link" else "Search or type URL",
+                                            color = TextMuted, fontSize = 14.sp
+                                        )
                                     }
                                     inner()
                                 }
@@ -1689,6 +1719,21 @@ private fun SwiftBrowserApp() {
                                     modifier = Modifier.size(31.dp)
                                 ) {
                                     Icon(Icons.Rounded.Close, "Clear address", tint = TextMuted, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            if (clipboardUrl != null && address.isEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        clipboardUrl?.let {
+                                            address = it
+                                            showSuggestions = true
+                                            addressFocusRequester.requestFocus()
+                                            keyboardController?.show()
+                                        }
+                                    },
+                                    modifier = Modifier.size(31.dp)
+                                ) {
+                                    Icon(Icons.Rounded.ContentPaste, "Paste link", tint = Accent, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -2183,16 +2228,18 @@ private fun SwiftBrowserApp() {
                             (term.contains('.') || term.startsWith("localhost") || term.startsWith("http"))
                         Column(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-                                .clip(RoundedCornerShape(24.dp)).background(Surface).padding(vertical = 6.dp)
+                                .clip(RoundedCornerShape(16.dp)).background(Surface2).padding(vertical = 4.dp)
                         ) {
                             SuggestionRow(
                                 icon = if (looksLikeUrl) Icons.Rounded.Public else Icons.Rounded.Search,
-                                title = androidx.compose.ui.text.AnnotatedString(term)
+                                title = androidx.compose.ui.text.AnnotatedString(term),
+                                trailing = Icons.Rounded.NorthWest
                             ) { load(term) }
                             webSuggestions.forEach { sug ->
                                 SuggestionRow(
                                     icon = Icons.Rounded.Search,
-                                    title = suggestionText(sug, term)
+                                    title = suggestionText(sug, term),
+                                    trailing = Icons.Rounded.NorthWest
                                 ) { load(appSettings.searchUrl(sug)) }
                             }
                             localHits.forEach { (title, url) ->
@@ -2382,6 +2429,39 @@ private fun SwiftBrowserApp() {
                 }
 
             }
+            }
+
+            // --- ADVANCED SEARCH SCREEN ---
+            val searchLocalHits = (bookmarksNow() + store.history())
+                .distinctBy { it.second }
+                .filter {
+                    searchQuery.isEmpty() || it.first.contains(searchQuery, true) ||
+                        it.second.contains(searchQuery, true)
+                }
+                .take(6)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showSearchScreen,
+                enter = fadeIn(tween(140)) + slideInVertically(initialOffsetY = { it / 20 }),
+                exit = fadeOut(tween(90)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                BackHandler { showSearchScreen = false }
+                SearchScreen(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    clipboardUrl = clipboardUrl,
+                    searchEngine = appSettings.searchEngine,
+                    localHits = searchLocalHits,
+                    onSearch = { q ->
+                        showSearchScreen = false
+                        load(appSettings.searchUrl(q))
+                    },
+                    onOpenUrl = { u ->
+                        showSearchScreen = false
+                        load(u)
+                    },
+                    onClose = { showSearchScreen = false }
+                )
             }
 
             val sheetGid = tabGroups[activeId]
@@ -4438,22 +4518,273 @@ private fun fetchSuggestions(q: String, engine: String = "brave"): List<String> 
     return emptyList()
 }
 
+/** Returns the clipboard text when it holds an http(s) URL, otherwise null. */
+private fun readClipboardUrl(clipboard: androidx.compose.ui.platform.ClipboardManager): String? {
+    val text = runCatching { clipboard.getText()?.text }.getOrNull() ?: return null
+    val trimmed = text.trim()
+    return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed else null
+}
+
+/** Unwraps the activity from a context so the lifecycle can be observed. */
+private fun Context.findHostActivity(): android.app.Activity? {
+    var ctx: Context = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
+/**
+ * Brave style search screen: a large search field with clipboard awareness and
+ * live network suggestions presented as Material 3 list items in a rounded card.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SearchScreen(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    clipboardUrl: String?,
+    searchEngine: String,
+    localHits: List<Pair<String, String>>,
+    onSearch: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        delay(140)
+        runCatching { focusRequester.requestFocus() }
+        keyboard?.show()
+    }
+
+    LaunchedEffect(query) {
+        suggestions = emptyList()
+        val q = query.trim()
+        if (q.isNotEmpty()) {
+            delay(180)
+            suggestions = withContext(Dispatchers.IO) { fetchSuggestions(q, searchEngine) }
+        }
+    }
+
+    val term = query.trim()
+    val looksLikeUrl = !term.contains(' ') &&
+        (term.contains('.') || term.startsWith("localhost") || term.startsWith("http"))
+
+    Column(
+        Modifier.fillMaxSize().background(Bg)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        // --- search field ---
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Close search", tint = TextMain)
+            }
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Surface2)
+                    .padding(start = 14.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.Search, null, tint = TextMuted, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(11.dp))
+                BasicTextField(
+                    value = query,
+                    onValueChange = { onQueryChange(it) },
+                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                    singleLine = true,
+                    textStyle = TextStyle(color = TextMain, fontSize = 15.sp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(
+                        onGo = {
+                            if (term.isBlank()) return@KeyboardActions
+                            if (looksLikeUrl) onOpenUrl(term) else onSearch(term)
+                        }
+                    ),
+                    decorationBox = { inner ->
+                        if (query.isEmpty()) {
+                            Text(
+                                if (clipboardUrl != null) "Paste link" else "Search or type URL",
+                                color = TextMuted, fontSize = 15.sp
+                            )
+                        }
+                        inner()
+                    }
+                )
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Rounded.Close, "Clear search", tint = TextMuted, modifier = Modifier.size(18.dp))
+                    }
+                }
+                if (clipboardUrl != null) {
+                    IconButton(
+                        onClick = { clipboardUrl?.let { onQueryChange(it) } },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Rounded.ContentPaste, "Paste link", tint = Accent, modifier = Modifier.size(19.dp))
+                    }
+                }
+            }
+        }
+
+        // --- suggestions ---
+        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp)
+        ) {
+            if (clipboardUrl != null && term.isBlank()) {
+                item {
+                    SearchSuggestionCard {
+                        SearchListItem(
+                            icon = Icons.Rounded.ContentPaste,
+                            title = "Paste link",
+                            subtitle = clipboardUrl
+                        ) { clipboardUrl?.let { onOpenUrl(it) } }
+                    }
+                }
+                item { Spacer(Modifier.height(12.dp)) }
+            }
+
+            if (term.isNotEmpty()) {
+                item {
+                    SearchSuggestionCard {
+                        SearchListItem(
+                            icon = Icons.Rounded.Search,
+                            title = "Search the web for \"$term\"",
+                            trailing = Icons.Rounded.NorthWest
+                        ) { onSearch(term) }
+                    }
+                }
+                item { Spacer(Modifier.height(12.dp)) }
+            }
+
+            if (suggestions.isNotEmpty()) {
+                item {
+                    SearchSuggestionCard {
+                        suggestions.forEach { s ->
+                            SearchListItem(
+                                icon = Icons.Rounded.Search,
+                                title = s,
+                                trailing = Icons.Rounded.NorthWest
+                            ) { onSearch(s) }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(12.dp)) }
+            }
+
+            if (localHits.isNotEmpty()) {
+                item {
+                    Text(
+                        "HISTORY & BOOKMARKS",
+                        color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.4.sp,
+                        modifier = Modifier.padding(start = 6.dp, bottom = 8.dp)
+                    )
+                }
+                item {
+                    SearchSuggestionCard {
+                        localHits.forEach { (title, url) ->
+                            SearchListItem(
+                                icon = Icons.Rounded.History,
+                                title = title.ifBlank { url },
+                                subtitle = url
+                            ) { onOpenUrl(url) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Rounded Material 3 surface that groups search suggestions. */
+@Composable
+private fun SearchSuggestionCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        color = Surface2,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(vertical = 4.dp), content = content)
+    }
+}
+
+/** Material 3 list item used inside the suggestion card. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SearchListItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    trailing: ImageVector? = null,
+    onClick: () -> Unit
+) {
+    ListItem(
+        onClick = onClick,
+        content = {
+            Text(
+                title, color = TextMain, fontSize = 14.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        },
+        supportingContent = if (subtitle != null) {
+            {
+                Text(
+                    subtitle, color = TextMuted, fontSize = 11.sp, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+        } else null,
+        leadingContent = {
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(Surface3),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = Accent, modifier = Modifier.size(17.dp))
+            }
+        },
+        trailingContent = if (trailing != null) {
+            { Icon(trailing, null, tint = TextMuted, modifier = Modifier.size(17.dp)) }
+        } else null,
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
 @Composable
 private fun SuggestionRow(
     icon: ImageVector,
     title: androidx.compose.ui.text.AnnotatedString,
     subtitle: String? = null,
+    trailing: ImageVector? = null,
     onClick: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = TextMuted, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(14.dp))
+        Box(
+            Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(Surface3),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = Accent, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                title, color = TextMain, fontSize = 15.sp, maxLines = 1,
+                title, color = TextMain, fontSize = 14.sp, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             if (subtitle != null) {
@@ -4462,6 +4793,9 @@ private fun SuggestionRow(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
+        }
+        if (trailing != null) {
+            Icon(trailing, null, tint = TextMuted, modifier = Modifier.size(17.dp))
         }
     }
 }
