@@ -129,6 +129,11 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 
 private val Bg = Color(0xFF101114)
 private val Surface = Color(0xFF1A1C20)
