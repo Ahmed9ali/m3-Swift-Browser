@@ -2285,9 +2285,9 @@ private fun SwiftBrowserApp() {
                             SettingsMenuBox(dots = true)
                         }
                     }
-                } else {
-                    // --- MATERIAL 3 EXPRESSIVE BOTTOM NAVIGATION BAR ---
-                    val canBookmarkPage = !isHome && pageUrl.startsWith("http")
+                } else if (isHome && address == "swift://home" && !addressFocused && !showSuggestions) {
+                    // --- MATERIAL 3 EXPRESSIVE BOTTOM NAVIGATION BAR (Home screen only) ---
+                    val onBookmarksRoute = address == "swift://bookmarks" || address == "swift://history"
                     val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
 
                     NavigationBar(
@@ -2298,29 +2298,27 @@ private fun SwiftBrowserApp() {
                         BottomBarItem(
                             icon = Icons.Rounded.Home,
                             label = "Home",
-                            selected = isHome,
+                            selected = isHome && address == "swift://home",
                             onClick = { load("swift://home") }
                         )
 
                         BottomBarItem(
-                            icon = if (canBookmarkPage && isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                            icon = Icons.Rounded.BookmarkBorder,
                             label = "Bookmarks",
-                            selected = canBookmarkPage && isBookmarked,
+                            selected = onBookmarksRoute,
                             onClick = {
-                                if (canBookmarkPage) {
-                                    toggleBookmark()
-                                } else {
-                                    address = "swift://bookmarks"
-                                    showTabs = false
-                                    showSuggestions = false
-                                }
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                address = "swift://bookmarks"
+                                showTabs = false
+                                showSuggestions = false
                             }
                         )
 
                         BottomBarItem(
                             icon = Icons.Rounded.Search,
                             label = "Search",
-                            selected = false,
+                            selected = addressFocused || showSuggestions,
                             onClick = {
                                 address = ""
                                 showSuggestions = false
@@ -2737,11 +2735,11 @@ private fun RowScope.BottomBarItem(
         },
         label = { Text(label) },
         colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Accent,
-            selectedTextColor = Accent,
-            unselectedIconColor = TextMuted,
-            unselectedTextColor = TextMuted,
-            indicatorColor = AccentSoft
+            selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            indicatorColor = MaterialTheme.colorScheme.secondaryContainer
         )
     )
 }
