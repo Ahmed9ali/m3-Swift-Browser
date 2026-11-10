@@ -83,6 +83,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -2279,84 +2281,73 @@ private fun SwiftBrowserApp() {
                         }
                     }
                 } else {
-                    Surface(
-                        color = Surface,
-                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    // --- MATERIAL 3 EXPRESSIVE BOTTOM NAVIGATION BAR ---
+                    val canBookmarkPage = !isHome && pageUrl.startsWith("http")
+                    val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
+
+                    NavigationBar(
+                        containerColor = Surface,
+                        tonalElevation = 0.dp,
+                        windowInsets = WindowInsets(0)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Home
-                            BottomBarItem(
-                                icon = Icons.Rounded.Home,
-                                label = "Home",
-                                isSelected = isHome,
-                                onClick = { load("swift://home") }
-                            )
-                            
-                            // Bookmark
-                            val canBookmarkPage = !isHome && pageUrl.startsWith("http")
-                            BottomBarItem(
-                                icon = if (canBookmarkPage && isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
-                                label = "Bookmarks",
-                                isSelected = canBookmarkPage && isBookmarked,
-                                onClick = {
-                                    if (canBookmarkPage) {
-                                        toggleBookmark()
-                                    } else {
-                                        address = "swift://bookmarks"
-                                        showTabs = false
-                                        showSuggestions = false
-                                    }
-                                }
-                            )
-                            
-                            // Search
-                            BottomBarItem(
-                                icon = Icons.Rounded.Search,
-                                label = "Search",
-                                isSelected = false,
-                                onClick = {
-                                    address = ""
+                        BottomBarItem(
+                            icon = Icons.Rounded.Home,
+                            label = "Home",
+                            selected = isHome,
+                            onClick = { load("swift://home") }
+                        )
+
+                        BottomBarItem(
+                            icon = if (canBookmarkPage && isBookmarked) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                            label = "Bookmarks",
+                            selected = canBookmarkPage && isBookmarked,
+                            onClick = {
+                                if (canBookmarkPage) {
+                                    toggleBookmark()
+                                } else {
+                                    address = "swift://bookmarks"
+                                    showTabs = false
                                     showSuggestions = false
-                                    addressFocusRequester.requestFocus()
-                                    keyboardController?.show()
                                 }
-                            )
-                            
-                            // Tabs
-                            val activeIsPrivate = tabs.firstOrNull { it.id == activeId }?.isPrivate == true
-                            BottomBarItem(
-                                icon = Icons.Rounded.Tab,
-                                label = "Tabs",
-                                isSelected = showTabs,
-                                badgeCount = tabs.count { it.isPrivate == activeIsPrivate },
-                                onClick = {
-                                    if (!showTabs) {
-                                        captureThumb(activeId)
-                                        tabSection = if (activeIsPrivate) 2 else 0
-                                    }
-                                    showTabs = !showTabs
-                                    showShield = false
-                                    showSuggestions = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
+                            }
+                        )
+
+                        BottomBarItem(
+                            icon = Icons.Rounded.Search,
+                            label = "Search",
+                            selected = false,
+                            onClick = {
+                                address = ""
+                                showSuggestions = false
+                                addressFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            }
+                        )
+
+                        BottomBarItem(
+                            icon = Icons.Rounded.Tab,
+                            label = "Tabs",
+                            selected = showTabs,
+                            badgeCount = tabs.count { it.isPrivate == activeIsPrivate },
+                            onClick = {
+                                if (!showTabs) {
+                                    captureThumb(activeId)
+                                    tabSection = if (activeIsPrivate) 2 else 0
                                 }
-                            )
-                            
-                            // Menu
-                            BottomBarItem(
-                                icon = Icons.Rounded.MoreVert,
-                                label = "Menu",
-                                isSelected = showMenu,
-                                onClick = { showMenu = true }
-                            )
-                        }
+                                showTabs = !showTabs
+                                showShield = false
+                                showSuggestions = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            }
+                        )
+
+                        BottomBarItem(
+                            icon = Icons.Rounded.MoreVert,
+                            label = "Menu",
+                            selected = showMenu,
+                            onClick = { showMenu = true }
+                        )
                     }
                 }
             }
@@ -2713,28 +2704,41 @@ private fun SwiftBrowserApp() {
 private fun BottomBarItem(
     icon: ImageVector,
     label: String,
-    isSelected: Boolean,
+    selected: Boolean,
     badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
-    val color = if (isSelected) Accent else TextMuted
-    Column(
-        Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(vertical = 8.dp, horizontal = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (badgeCount > 0) {
-            BadgedBox(badge = { Badge { Text(badgeCount.toString()) } }) {
-                Icon(icon, contentDescription = label, tint = color)
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.15f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "navIconScale"
+    )
+    NavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = {
+            if (badgeCount > 0) {
+                BadgedBox(
+                    badge = { Badge { Text(badgeCount.toString(), fontSize = 9.sp) } }
+                ) {
+                    Icon(icon, contentDescription = label, modifier = Modifier.scale(iconScale))
+                }
+            } else {
+                Icon(icon, contentDescription = label, modifier = Modifier.scale(iconScale))
             }
-        } else {
-            Icon(icon, contentDescription = label, tint = color)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 10.sp, color = color, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-    }
+        },
+        label = { Text(label) },
+        colors = NavigationBarItemDefaults.colors(
+            selectedIconColor = Accent,
+            selectedTextColor = Accent,
+            unselectedIconColor = TextMuted,
+            unselectedTextColor = TextMuted,
+            indicatorColor = AccentSoft
+        )
+    )
 }
 
 @Composable
@@ -2742,11 +2746,23 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(Brush.verticalGradient(listOf(Color(0x2EFFFFFF), Color(0x14FFFFFF))))
-            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(28.dp))
-            .padding(16.dp),
+            .clip(RoundedCornerShape(24.dp))
+            .background(Surface2)
+            .padding(top = 12.dp, bottom = 12.dp, start = 14.dp, end = 14.dp),
         content = content
+    )
+}
+
+@Composable
+private fun RowScope.HomeDivider() {
+    Box(
+        Modifier
+            .padding(horizontal = 6.dp)
+            .width(1.dp)
+            .height(32.dp)
+            .align(Alignment.CenterVertically)
+            .clip(RoundedCornerShape(1.dp))
+            .background(Surface3)
     )
 }
 
@@ -2761,9 +2777,14 @@ private fun HomeSectionLabel(text: String) {
 
 @Composable
 private fun HomeStat(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(value, color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = TextMuted, fontSize = 10.sp, lineHeight = 13.sp)
+    Column(
+        modifier
+            .padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, color = Accent, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(3.dp))
+        Text(label, color = TextMuted, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1)
     }
 }
 
@@ -2818,62 +2839,66 @@ private fun HomeScreen(
             }
     ) {
         WallpaperBackdrop(blurred = searchActive)
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(Color(0x22000000), Color(0x66000000))
-                )
-            )
-        )
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 18.dp)
-                .padding(top = 26.dp, bottom = 20.dp)
+                .padding(top = 30.dp, bottom = 20.dp)
         ) {
+            // Header: greeting + privacy shield pill
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         greeting,
-                        color = Accent, fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold, letterSpacing = 2.sp
+                        color = TextMuted, fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(3.dp))
                     Text(
                         "Browse freely.",
-                        color = TextMain, fontSize = 34.sp, fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "A faster, quieter web starts here.",
-                        color = TextMuted, fontSize = 13.sp
+                        color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold
                     )
                 }
-                Box(
+                Row(
                     Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Brush.linearGradient(listOf(Accent, Color(0xFFB83F25)))),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Surface2)
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Rounded.Shield, null, tint = Color.White, modifier = Modifier.size(29.dp))
+                    Icon(Icons.Rounded.Shield, null, tint = Accent, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "$totalBlocked",
+                        color = TextMain, fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold, lineHeight = 14.sp
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text("blocked", color = TextMuted, fontSize = 10.sp)
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(26.dp))
 
             HomeSectionLabel("PRIVACY STATS")
-            GlassCard {
-                Row(Modifier.fillMaxWidth()) {
-                    HomeStat(totalBlocked.toString(), "Trackers & ads\nblocked", Modifier.weight(1f))
-                    HomeStat(formatKb(totalBlocked * 40L), "Est. data\nsaved", Modifier.weight(1f))
-                    HomeStat(formatSeconds(totalBlocked * 0.05), "Est. time\nsaved", Modifier.weight(1f))
-                }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Surface2)
+                    .padding(horizontal = 10.dp, vertical = 18.dp)
+            ) {
+                HomeStat(totalBlocked.toString(), "Trackers blocked", Modifier.weight(1f))
+                HomeDivider()
+                HomeStat(formatKb(totalBlocked * 40L), "Data saved", Modifier.weight(1f))
+                HomeDivider()
+                HomeStat(formatSeconds(totalBlocked * 0.05), "Time saved", Modifier.weight(1f))
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(22.dp))
 
-            HomeSectionLabel("QUICK ACCESS")
+            HomeSectionLabel("FAVORITES")
             GlassCard {
                 shortcuts.chunked(4).forEachIndexed { rowIndex, rowItems ->
                     if (rowIndex > 0) Spacer(Modifier.height(10.dp))
@@ -2915,16 +2940,48 @@ private fun HomeScreen(
             }
 
             if (recent.isNotEmpty()) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(22.dp))
                 HomeSectionLabel("RECENTLY VISITED")
                 GlassCard {
-                    recent.forEach { (title, url) ->
+                    recent.forEachIndexed { i, (title, url) ->
+                        if (i > 0) Spacer(Modifier.height(6.dp))
                         HomeLinkRow(title.ifBlank { url }, url, Icons.Rounded.History, onOpen)
                     }
                 }
             }
+
+            Spacer(Modifier.height(22.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HomeQuickLink("Bookmarks", "swift://bookmarks", Icons.Rounded.Bookmark, onOpen)
+                HomeQuickLink("History", "swift://history", Icons.Rounded.History, onOpen)
+            }
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun RowScope.HomeQuickLink(label: String, url: String, icon: ImageVector, onOpen: (String) -> Unit) {
+    Row(
+        Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Surface2)
+            .clickable { onOpen(url) }
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(Surface3),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = Accent, modifier = Modifier.size(16.dp))
+        }
+        Spacer(Modifier.width(9.dp))
+        Text(label, color = TextMain, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
