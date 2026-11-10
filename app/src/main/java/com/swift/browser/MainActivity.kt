@@ -121,6 +121,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 // --- MATERIAL 3 EXPRESSIVE THEME IMPORTS ---
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -531,8 +533,8 @@ private fun SwiftBrowserApp() {
     val hostLifecycle = remember { context.findHostActivity()?.lifecycle }
     DisposableEffect(hostLifecycle) {
         if (hostLifecycle == null) return@DisposableEffect onDispose { }
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
                 clipboardUrl = readClipboardUrl(clipboardManager)
             }
         }
@@ -4525,11 +4527,11 @@ private fun readClipboardUrl(clipboard: androidx.compose.ui.platform.ClipboardMa
     return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed else null
 }
 
-/** Unwraps the activity from a context so the lifecycle can be observed. */
-private fun Context.findHostActivity(): android.app.Activity? {
+/** Unwraps the host activity so its lifecycle can be observed. */
+private fun Context.findHostActivity(): ComponentActivity? {
     var ctx: Context = this
     while (ctx is android.content.ContextWrapper) {
-        if (ctx is android.app.Activity) return ctx
+        if (ctx is ComponentActivity) return ctx
         ctx = ctx.baseContext
     }
     return null
